@@ -1,6 +1,9 @@
+Check filtering algorithm
+- Focus on reducing the largest degree
+
+Ideas
 - Preprocessing: Decompose errors with degree ≥ 4 independent errors
 - Weight optimisation
-- Approximate Integer Programming
 - Comparing between different decompositions (such as comparing R/G/B in color codes)
 - Stim & Sinter integration
 

@@ -1,8 +1,19 @@
 import numpy as np
 import scipy as sp
-import scipy.optimize as spop
+import mip
 import pymatching
+import os
+import sys
+import io
 from typing import Union, Optional, Tuple, List
+import time
+
+try:
+    import parmap
+
+    PARMAP = True
+except ImportError:
+    PARMAP = False
 
 
 def compress_identical_cols(sparse_matrix: sp.sparse.csc_matrix,
@@ -55,6 +66,17 @@ def _check_graphlike(H: sp.sparse.csc_matrix):
     return np.all(non_zero_per_col <= 2)
 
 
+def _show_pbar(iteration, total, bar_length=40):
+    # Calculate the progress as a percentage
+    progress = (iteration + 1) / total * 100
+    # Create the progress bar string
+    bar = '#' * int(progress / (100 / bar_length)) + '-' * (
+            bar_length - int(progress / (100 / bar_length)))
+    # Print the progress bar
+    sys.stdout.write(f'\r[{bar}] {progress:.2f}%')
+    sys.stdout.flush()
+
+
 class Decoder:
     def __init__(self,
                  H: Union[np.ndarray, sp.sparse.spmatrix],
@@ -62,7 +84,9 @@ class Decoder:
                  p: Optional[Union[np.ndarray, List[float]]] = None,
                  filtering_strategy: str = 'intprog_advanced',
                  filtering_options: Optional[dict] = None,
-                 verbose: bool = True):
+                 preprocessing: bool = True,
+                 preprocessing_strategy: str = "distant_checks_first",
+                 verbose: bool = False):
         if p is None:
             self.weights = None
         else:
@@ -72,18 +96,23 @@ class Decoder:
 
         if not isinstance(H, sp.sparse.csc_matrix):
             H = sp.sparse.csc_matrix(H)
+        H = H.astype('bool')
 
         self.H = H
         self.filtering_strategy = filtering_strategy
+        if filtering_options is None:
+            filtering_options = {}
         self.filtering_options = filtering_options
+        self.verbose = verbose
 
         if verbose:
             print(f"{H.shape[0]} checks, {H.shape[1]} faults")
             print(f"p given: {p is not None}")
             print(f"filtering_strategy = {filtering_strategy}")
-            print("Start decomposition:")
+            print(f"filtering_options = {filtering_options}")
+            print("Start decomposition.")
 
-        self._decomp_full(verbose=verbose)
+        self._decomp_full()
 
     @property
     def num_checks(self) -> int:
@@ -93,39 +122,109 @@ class Decoder:
     def num_faults(self) -> int:
         return self.H.shape[1]
 
+    # def _preprocess_H(self, strategy):
+    #     H = self.H
+    #     if strategy == 'distant_checks_first':
+    #         for fault in range(H.shape[1]):
+    #             degree = H.indptr[fault + 1] - H.indptr[fault]
+    #             if degree > 3:
+    #
+
     def _filter_checks_for_reduced_H(self,
                                      H: sp.sparse.csc_matrix) \
             -> np.ndarray:
+        verbose = self.verbose
         strategy = self.filtering_strategy
+        options = self.filtering_options
         if strategy == 'intprog_simple':
-            c = np.full(self.num_checks, -1)
-            bounds = spop.Bounds(lb=0, ub=1)
-            const = spop.LinearConstraint(H.T, lb=0, ub=2)
-            res = spop.milp(c,
-                            integrality=1,
-                            bounds=bounds,
-                            constraints=const,
-                            options=self.filtering_options)
-            check_filter = np.round(res['x']).astype(bool)
+            model = mip.Model(sense=mip.MAXIMIZE)
+
+            model.verbose = 0
+            x = [model.add_var(var_type=mip.BINARY) for _ in range(H.shape[0])]
+            if verbose:
+                print("    Initialising LIP...")
+            for j in range(H.shape[1]):
+                mip_sum = mip.xsum(x[i] for i in np.nonzero(H[:, j])[0])
+                model += mip_sum <= 2
+
+            model.objective = mip.xsum(x)
+            try:
+                model.emphasis = options['emphasis']
+            except KeyError:
+                model.emphasis = 0  # balanced emphasis
+            opt_options = options.copy()
+            opt_options.pop('emphasis', None)
+            if verbose:
+                print("    Running LIP... ", end='')
+            status = model.optimize(**opt_options, )
+            if status == mip.OptimizationStatus.OPTIMAL \
+                    or status == mip.OptimizationStatus.FEASIBLE:
+                if verbose:
+                    print("Success!")
+                check_filter = [v.x for v in model.vars]
+                check_filter = np.round(np.array(check_filter)).astype(bool)
+                if status == mip.OptimizationStatus.FEASIBLE:
+                    raise Warning("Decomposition is not optimal.")
+            else:
+                raise RuntimeError("Decomposition fails.")
+
         elif strategy == 'intprog_advanced':
-            c = np.full(H.shape[0], -1)
-            bounds = spop.Bounds(lb=0, ub=1)
             H_col_sum = H.sum(axis=0).A1
             max_check_degree = np.max(H_col_sum)
-            for l in range(1, max_check_degree + 1):
-                const_lb = np.maximum(0, H_col_sum - l)
-                const_ub = np.minimum(2, H_col_sum)
-                const = spop.LinearConstraint(H.T, lb=const_lb, ub=const_ub)
-                res = spop.milp(c,
-                                integrality=1,
-                                bounds=bounds,
-                                constraints=const,
-                                options=self.filtering_options)
-                if res['success']:
-                    check_filter = np.round(res['x']).astype(bool)
+            opt_options = options.copy()
+            opt_options.pop('emphasis', None)
+
+            for l in range(max_check_degree - 2, max_check_degree + 1):
+                if verbose:
+                    print(f"l = {l}")
+                    print("Initializing LIP...")
+
+                model = mip.Model(sense=mip.MAXIMIZE)
+
+                model.verbose = False
+                x = [model.add_var(var_type=mip.BINARY) for _ in
+                     range(H.shape[0])]
+                const_lb = H_col_sum - l
+                for j in range(H.shape[1]):
+                    mip_sum = mip.xsum(x[i] for i in np.nonzero(H[:, j])[0])
+                    model += mip_sum <= 2
+                    if const_lb[j] >= 1:
+                        model += mip_sum >= const_lb[j]
+
+                model.objective = mip.xsum(x)
+                try:
+                    model.emphasis = options['emphasis']
+                except KeyError:
+                    model.emphasis = 0  # emphasis on optimality
+
+                if verbose:
+                    print("Running LIP... ", end='')
+                status = model.optimize(**opt_options)
+                if status == mip.OptimizationStatus.OPTIMAL \
+                        or status == mip.OptimizationStatus.FEASIBLE:
+                    if verbose:
+                        print("Success!")
+                    check_filter = [v.x for v in model.vars]
+                    check_filter \
+                        = np.round(np.array(check_filter)).astype(bool)
+                    if status == mip.OptimizationStatus.FEASIBLE:
+                        raise Warning("Decomposition is not optimal.")
                     break
+                if verbose:
+                    print("No solution found.")
             else:
                 raise RuntimeError("Fail to find a decomposition.")
+
+        elif strategy == 'greedy_random':
+            check_filter = np.full(H.shape[0], False)
+            degrees = H.sum(axis=0).A1
+            min_degrees = np.min(degrees)
+            faults = np.arange(H.shape[1])
+            faults_min_degree = faults[min_degrees]
+            queue = [np.random.choice(faults_min_degree)]
+            done = set()
+            while queue:
+                adj_checks: np.ndarray = H[:, queue[0]].indices
 
         else:
             raise ValueError("Invalid strategy.")
@@ -140,7 +239,6 @@ class Decoder:
 
         check_filter \
             = self._filter_checks_for_reduced_H(H)
-
         # H matrix & weights for current round
         H_reduced = H[check_filter, :]
         H_reduced, weights_reduced, col_groups \
@@ -156,8 +254,9 @@ class Decoder:
 
         return H_reduced, H_left, weights_reduced, check_filter
 
-    def _decomp_full(self,
-                     verbose: bool = True):
+    def _decomp_full(self):
+        verbose = self.verbose
+
         H_left = self.H
         checks_left = np.arange(H_left.shape[0])
         last_check_id = checks_left[-1]
@@ -171,19 +270,21 @@ class Decoder:
         while True:
             if _check_graphlike(H_left):
                 if verbose:
-                    print(f"    round {len(decomp_Hs)} "
-                          f"({H_left.shape[0]} checks, "
-                          f"{H_left.shape[1]} edges)")
+                    print()
+                    print(f"ROUND {len(decomp_Hs)}:")
+                    print(f"{H_left.shape[0]} checks, {H_left.shape[1]} edges")
                 decomp_Hs.append(H_left)
                 decomp_checks.append(checks_left)
                 decomp_weights.append(self.weights)
                 break
 
             if verbose:
-                print(f"    round {len(decomp_Hs)} ", end='')
+                print()
+                print(f"ROUND {len(decomp_Hs)}:")
+                print(f"Remains: {H_left.shape[0]} checks")
 
             H_reduced, H_left, weights_reduced, check_filter \
-                = self._decomp_sng_round(H_left, checks_left)
+                = self._decomp_sng_round(H_left)
             decomp_Hs.append(H_reduced)
             decomp_checks.append(checks_left[check_filter])
             decomp_weights.append(weights_reduced)
@@ -197,14 +298,13 @@ class Decoder:
             last_check_id = faults_merged[-1]
 
             if verbose:
-                print(f"({H_reduced.shape[0]} checks, "
-                      f"{H_reduced.shape[1]} edges)")
+                print(f"{H_reduced.shape[0]} checks, {H_reduced.shape[1]} edges")
 
     def decode(self,
                syndrome: Union[np.ndarray, List[bool]],
                *,
                return_weights: bool = False,
-               return_faults: bool = False) \
+               verbose: bool = False) \
             -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         num_stages = len(self.decomp_Hs)
         if isinstance(syndrome, np.ndarray):
@@ -217,7 +317,14 @@ class Decoder:
 
         batch = syndrome_full.ndim == 2
 
+        if verbose:
+            print(f"num_stages = {num_stages}")
+            print(f"num_trials = {syndrome_full.shape[0] if batch else 1}")
+            print("Start decoding.")
+
         for i_stage in range(num_stages):
+            if verbose:
+                print(f"Stage {i_stage}... ", end="")
             H = self.decomp_Hs[i_stage]
             weights = self.decomp_weights[i_stage]
             checks = self.decomp_checks[i_stage]
@@ -236,9 +343,43 @@ class Decoder:
             if i_stage < num_stages - 1:
                 syndrome_full = np.concatenate([syndrome_full, preds], axis=-1)
 
+            if verbose:
+                print(f"Success!")
+
         if return_weights:
             return preds, sol_weights
         else:
+            return preds
+
+    def decode_mp(self,
+                  syndrome: np.ndarray,
+                  *,
+                  num_procs: Optional[int] = None,
+                  return_weights: bool = False,
+                  verbose: bool = False) \
+            -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        if not PARMAP:
+            raise ImportError("parmap is not installed.")
+        num_procs = os.cpu_count() if num_procs is None else num_procs
+
+        if verbose:
+            print(f"num_trials = {syndrome.shape[0]}")
+            print(f"num_procs = {num_procs}")
+            print("Start decoding.")
+
+        syndrome_splitted = np.array_split(syndrome, num_procs)
+        results = parmap.map(self.decode,
+                             syndrome_splitted,
+                             return_weights=return_weights,
+                             verbose=False,
+                             pm_pbar=verbose)
+        if return_weights:
+            preds, sol_weights = zip(*results)
+            preds = np.concatenate(list(preds), axis=0)
+            sol_weights = np.concatenate(list(sol_weights), axis=0)
+            return preds, sol_weights
+        else:
+            preds = np.concatenate(results, axis=0)
             return preds
 
     def check_validity(self,
