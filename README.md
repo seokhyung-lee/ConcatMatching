@@ -1,1 +1,1 @@
-**Generalised Concatenated Matching Decoder**
+# Generalised Concatenated Matching Decoder
