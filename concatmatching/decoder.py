@@ -9,10 +9,8 @@ import igraph as ig
 import networkx as nx
 import numpy as np
 import pymatching
-import scipy as sp
 import scipy.sparse as spsp
 # import mip
-from numpy.typing import NDArray
 from networkx.algorithms import bipartite
 
 
