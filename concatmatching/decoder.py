@@ -403,6 +403,7 @@ class Decoder:
             print(f"p given: {p is not None}")
             print(f"filtering_strategy = {filtering_strategy}")
             print(f"filtering_options = {filtering_options}")
+            print(f"comparison = {comparison}")
             print("Start decomposition.")
 
         self._decomp_full()
