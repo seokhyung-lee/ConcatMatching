@@ -357,26 +357,59 @@ class Decoder:
                  comparison: bool = False,
                  verbose: bool = False):
         """
-        Class for constructing the concatenated matching decoder for a given stabiliser code.
+        Class for constructing the concatenated matching decoder for a given
+        stabiliser code.
 
         Parameters
         ----------
         H: 2D array-like convertible to boolean scipy csc matrix
             Check matrix with shape (number of checks, number of faults).
         p: None or 1D array-like of float (default None)
-            Error probabilities of individual faults. len(p) should be the same as the number of checks. If None, all faults have the same probability.
+            Error probabilities of individual faults. len(p) should be the
+            same as the number of checks. If None, all faults have the same
+            probability.
         filtering_strategy: str (default 'greedy_coloring')
-            Check filtering strategy for decompsition. Currently, 'greedy_coloring' (default) and 'greedy_by_degree' are supported.
+            Check filtering strategy for decompsition. Currently,
+            'greedy_coloring' (default) and 'greedy_by_degree' are supported.
         filtering_options: dict or None (default None)
             Options for filtering.
-            - If filtering_strategy == 'greedy_coloring', 'strategy' and 'interchange' can be given; see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.coloring.greedy_color.html. If it is None, interchange=True by default and six strategies ('largest_first', 'smallest_last', 'independent_set', 'connected_sequential_bfs', 'connected_sequential_dfs', and 'saturation_largest_first') are all performed and the best one (giving the smallest number of colours) is selected.
-            - If filtering_strategy == 'greedy_by_degree', 'seed' can be given, which determines the seed for random state.
+            - If filtering_strategy == 'greedy_coloring', 'strategy' and
+            'interchange' can be given; see
+            https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.coloring.greedy_color.html.
+            If it is None, interchange=True by default and six strategies
+            ('largest_first', 'smallest_last', 'independent_set',
+            'connected_sequential_bfs', 'connected_sequential_dfs', and
+            'saturation_largest_first') are all performed and the best one
+            (giving the smallest number of colours) is selected.
+            - If filtering_strategy == 'greedy_by_degree', 'seed' can be
+            given, which determines the seed for random state.
         check_colors: None or 1D array-like of int (default None)
-            Colours of checks given manually. len(check_colors) should be the same as the number of checks. Each of its elements should be one of 0, 1, and 2, which indicates the color of the corresponding check. (Currently support only three colors) If this is given, the parameters 'filtering_strategy' and 'filtering_options' are ignored and the given colors of checks are directly used for decomposition.
-            For the decoder to work, each fault should affect no more than two checks in each pair of colors. For example, if a fault affects three checks with colors [0, 1, 2] or two checks with colors [0, 0], it is fine. However, if it affects three checks with colors [0, 0, 1], it is not fine. Note that this condition is not checked internally. Wrong assignment of colours will raise a PyMatching error during decoding.
-            This parameter can be particularly useful for decoding measurement errors, which flip two checks in consecutive time slices. The 'greedy_coloring' strategy will assign different colors to these checks, but assigning the same color to them is more appropriate.
+            Colours of checks given manually. len(check_colors) should be the
+            same as the number of checks. Each of its elements should be one
+            of 0, 1, and 2, which indicates the color of the corresponding
+            check. (Currently support only three colors) If this is given,
+            the parameters 'filtering_strategy' and 'filtering_options' are
+            ignored and the given colors of checks are directly used for
+            decomposition.
+            For the decoder to work, each fault should affect no more than two
+            checks in each pair of colors. For example, if a fault affects
+            three checks with colors [0, 1, 2] or two checks with colors
+            [0, 0], it is fine. However, if it affects three checks with colors
+            [0, 0, 1], it is not fine. Note that this condition is not checked
+            internally. Wrong assignment of colours will raise a PyMatching
+            error during decoding.
+            This parameter can be particularly useful for decoding measurement
+            errors, which flip two checks in consecutive time slices.
+            The 'greedy_coloring' strategy will assign different colors to
+            these checks, but assigning the same color to them is more
+            appropriate.
         comparison: bool (default False)
-            Whether to compare multiple different ways of decomposition and select the smallest-weight prediction when decoding. Currently, comparison=True is supported only when the projection of the tanner graph onto checks is three-colorable (i.e., checks can be coloured using three colours in a way that each fault is connected to checks of distinct colours).
+            Whether to compare multiple different ways of decomposition and
+            select the smallest-weight prediction when decoding. Currently,
+            comparison=True is supported only when the projection of the tanner
+            graph onto checks is three-colorable (i.e., checks can be coloured
+            using three colours in a way that each fault is connected to checks
+            of distinct colours).
         verbose: bool (default False)
             Verbosity level.
         """
@@ -756,9 +789,11 @@ class Decoder:
         syndrome: 1D array-like of bools or ints
             Syndrome data to be decoded.
         full_output: bool (default False)
-            Whether to return full output data as a dictionary, including the weight sum of the predicted errors.
+            Whether to return full output data as a dictionary, including the
+            weight sum of the predicted errors.
         check_validity: bool (default False)
-            Whether to include the validity of the decoding in full_output. The validity should be True if the decoding succeeds.
+            Whether to include the validity of the decoding in full_output.
+            The validity should be True if the decoding succeeds.
         verbose: bool (default False)
             Verbosity level.
 
