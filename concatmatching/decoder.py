@@ -353,6 +353,7 @@ class Decoder:
                  p: Sequence[float] | None = None,
                  filtering_strategy: str = 'greedy_coloring',
                  filtering_options: Dict[str, Any] | None = None,
+                 check_colors: np.ndarray | List[int] | None = None,
                  comparison: bool = False,
                  verbose: bool = False):
         """
@@ -363,13 +364,17 @@ class Decoder:
         H: 2D array-like convertible to boolean scipy csc matrix
             Check matrix with shape (number of checks, number of faults).
         p: None or 1D array-like of float (default None)
-            Error probabilities of individual faults. If None, all faults have the same probability.
+            Error probabilities of individual faults. len(p) should be the same as the number of checks. If None, all faults have the same probability.
         filtering_strategy: str (default 'greedy_coloring')
             Check filtering strategy for decompsition. Currently, 'greedy_coloring' (default) and 'greedy_by_degree' are supported.
         filtering_options: dict or None (default None)
             Options for filtering.
             - If filtering_strategy == 'greedy_coloring', 'strategy' and 'interchange' can be given; see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.coloring.greedy_color.html. If it is None, interchange=True by default and six strategies ('largest_first', 'smallest_last', 'independent_set', 'connected_sequential_bfs', 'connected_sequential_dfs', and 'saturation_largest_first') are all performed and the best one (giving the smallest number of colours) is selected.
             - If filtering_strategy == 'greedy_by_degree', 'seed' can be given, which determines the seed for random state.
+        check_colors: None or 1D array-like of int (default None)
+            Colours of checks given manually. len(check_colors) should be the same as the number of checks. Each of its elements should be one of 0, 1, and 2, which indicates the color of the corresponding check. (Currently support only three colors) If this is given, the parameters 'filtering_strategy' and 'filtering_options' are ignored and the given colors of checks are directly used for decomposition.
+            For the decoder to work, each fault should affect no more than two checks in each pair of colors. For example, if a fault affects three checks with colors [0, 1, 2] or two checks with colors [0, 0], it is fine. However, if it affects three checks with colors [0, 0, 1], it is not fine. Note that this condition is not checked internally. Wrong assignment of colours will raise a PyMatching error during decoding.
+            This parameter can be particularly useful for decoding measurement errors, which flip two checks in consecutive time slices. The 'greedy_coloring' strategy will assign different colors to these checks, but assigning the same color to them is more appropriate.
         comparison: bool (default False)
             Whether to compare multiple different ways of decomposition and select the smallest-weight prediction when decoding. Currently, comparison=True is supported only when the projection of the tanner graph onto checks is three-colorable (i.e., checks can be coloured using three colours in a way that each fault is connected to checks of distinct colours).
         verbose: bool (default False)
@@ -392,6 +397,7 @@ class Decoder:
             filtering_options = {}
         self.filtering_options = filtering_options
         self.comparison = comparison
+        self.check_colors = check_colors
         self.graph_decomps = []
         self.verbose = verbose
 
@@ -515,8 +521,17 @@ class Decoder:
             check_filter = check_filtering_by_degree(H,
                                                      seed=options.get('seed'))
 
-        elif strategy == 'greedy_coloring':
-            check_groups, _ = checks_coloring(H, **options)
+        elif strategy == 'greedy_coloring' or self.check_colors is not None:
+            if self.check_colors is None:
+                check_groups, _ = checks_coloring(H, **options)
+            else:
+                check_colors = np.asanyarray(self.check_colors, dtype='uint8')
+                if not (min(check_colors) == 0 and max(check_colors) == 2):
+                    raise ValueError("check_colors must have 0, 1, and 2 only.")
+                check_groups = {
+                    color: np.where(check_colors == color)[0].tolist()
+                    for color in range(3)
+                }
             num_colors = len(check_groups)
             if num_colors < 3:
                 check_filter = np.full(H.shape[0], True)
@@ -524,7 +539,8 @@ class Decoder:
                 if comparison:
                     if len(check_groups) != 3:
                         raise NotImplementedError(
-                            'Currently supports only 3-colorable graphs')
+                            'Comparison is currently supported only when checks are 3-colorable.'
+                        )
                     check_filter = []
                     for check_group in check_groups.values():
                         check_filter_sng = np.full(H.shape[0], True)
