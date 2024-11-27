@@ -1,4 +1,4 @@
-# Generalised Concatenated Matching Decoder
+# ConcatMatching: Generalised Concatenated Matching Decoder
 
 This Python package implements the **concatenated matching decoder** for decoding arbitrary stabiliser codes.
 
