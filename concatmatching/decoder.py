@@ -355,6 +355,26 @@ class Decoder:
                  filtering_options: Dict[str, Any] | None = None,
                  comparison: bool = False,
                  verbose: bool = False):
+        """
+        Class for constructing the concatenated matching decoder for a given stabiliser code.
+
+        Parameters
+        ----------
+        H: 2D array-like convertible to boolean scipy csc matrix
+            Check matrix with shape (number of checks, number of faults).
+        p: None or 1D array-like of float (default None)
+            Error probabilities of individual faults. If None, all faults have the same probability.
+        filtering_strategy: str (default 'greedy_coloring')
+            Check filtering strategy for decompsition. Currently, 'greedy_coloring' (default) and 'greedy_by_degree' are supported.
+        filtering_options: dict or None (default None)
+            Options for filtering.
+            - If filtering_strategy == 'greedy_coloring', 'strategy' and 'interchange' can be given; see https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.coloring.greedy_color.html. If it is None, interchange=True by default and six strategies ('largest_first', 'smallest_last', 'independent_set', 'connected_sequential_bfs', 'connected_sequential_dfs', and 'saturation_largest_first') are all performed and the best one (giving the smallest number of colours) is selected.
+            - If filtering_strategy == 'greedy_by_degree', 'seed' can be given, which determines the seed for random state.
+        comparison: bool (default False)
+            Whether to compare multiple different ways of decomposition and select the smallest-weight prediction when decoding. Currently, comparison=True is supported only when the projection of the tanner graph onto checks is three-colorable (i.e., checks can be coloured using three colours in a way that each fault is connected to checks of distinct colours).
+        verbose: bool (default False)
+            Verbosity level.
+        """
         if p is None:
             self.p = None
         else:
@@ -374,6 +394,9 @@ class Decoder:
         self.comparison = comparison
         self.graph_decomps = []
         self.verbose = verbose
+
+        if comparison:
+            assert filtering_strategy == 'greedy_coloring'
 
         if verbose:
             print(f"{H.shape[0]} checks, {H.shape[1]} faults")
@@ -704,10 +727,33 @@ class Decoder:
     def decode(self,
                syndrome: Sequence[bool | int],
                *,
-               return_data: bool = False,
+               full_output: bool = False,
                check_validity: bool = False,
                verbose: bool = False) \
             -> np.ndarray | Tuple[np.ndarray, Dict[str, Any]]:
+        """
+        Decode given syndrome data and return the predictions.
+
+        Parameters
+        ----------
+        syndrome: 1D array-like of bools or ints
+            Syndrome data to be decoded.
+        full_output: bool (default False)
+            Whether to return full output data as a dictionary, including the weight sum of the predicted errors.
+        check_validity: bool (default False)
+            Whether to include the validity of the decoding in full_output. The validity should be True if the decoding succeeds.
+        verbose: bool (default False)
+            Verbosity level.
+
+        Returns
+        -------
+        - If full_output == True, (preds, full_output).
+        - If full_output == False, preds.
+        preds: 1D boolean numpy array
+            Predicted errors.
+        full_output: dict
+            Additional output data.
+        """
         preds = []
         weights = []
         validities = []
@@ -737,15 +783,20 @@ class Decoder:
             print("Best DECOMP:", best_decomp)
             print("Min weight =", weights[best_decomp])
 
-        if return_data:
+        if full_output:
             data = {
                 'weight': weights[best_decomp],
-                'selected_decomp': best_decomp,
-                'weight_list': weights,
-                'preds_list': preds
             }
+            if self.comparison:
+                data.update({
+                    'best_decomp': best_decomp,
+                    'weight_list': weights,
+                    'preds_list': preds
+                })
+
             if check_validity:
-                data['validity'] = validities
+                data['validity'] = validities if self.comparison \
+                    else validities[0]
 
             return best_preds, data
         else:
