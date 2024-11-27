@@ -3,8 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="concatmatching",
     # Replace with your package name
-    version="0.0.1",
-    # Initial version
+    version="0.0.2",
     author="Seok-Hyung Lee",
     author_email="sh.lee1524@gmail.com",
     description="Generalised concatemated matching decoder for arbitrary stabiliser codes",
