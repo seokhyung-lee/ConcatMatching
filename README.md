@@ -4,7 +4,7 @@ This Python package implements the **concatenated matching decoder** for decodin
 
 The concatenated matching decoder was originally proposed for 2D color codes in [arXiv:2404.07482](https://arxiv.org/abs/2404.07482) (see [color-code-stim](https://github.com/seokhyung-lee/color-code-stim) for its initial implementation). This repository extends the decoder to support any stabiliser code with a user-friendly interface.
 
-**Note:** *This package is under active development and may fail to find a valid solution for codes that are not 2D color codes.*
+**Note:** *This package is under development and may fail to find a valid solution for codes that are not 2D color codes.*
 
 For decoding 2D color codes, this package offers a more streamlined approach compared to [color-code-stim](https://github.com/seokhyung-lee/color-code-stim). Simply provide a check matrix and some additional data, and the decoder will automatically decompose the Tanner graph using a graph colouring algorithm and execute the matching algorithm on each decomposed graph. No manual configuration is required.
 
