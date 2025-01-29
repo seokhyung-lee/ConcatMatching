@@ -2,7 +2,7 @@
 
 This Python package implements the **concatenated matching decoder** for decoding arbitrary stabiliser codes.
 
-The concatenated matching decoder was originally proposed for 2D color codes in [arXiv:2404.07482](https://arxiv.org/abs/2404.07482) (see [color-code-stim](https://github.com/seokhyung-lee/color-code-stim) for its initial implementation). This repository extends the decoder to support any stabiliser code with a user-friendly interface.
+The concatenated matching decoder was originally proposed for 2D color codes in [Quantum 9, 1609 (2025)](https://doi.org/10.22331/q-2025-01-27-1609) (see [color-code-stim](https://github.com/seokhyung-lee/color-code-stim) for its initial implementation). This repository extends the decoder to support any stabiliser code with a user-friendly interface.
 
 **Note:** *This package is under development and may fail to find a valid solution for codes that are not 2D color codes.*
 
@@ -22,17 +22,21 @@ See [example.ipynb](https://github.com/seokhyung-lee/ConcatMatching/blob/main/ex
 
 ## Citation
 
-If you want to cite this package in an academic work, please cite the original arXiv preprint:
+If you want to cite this module in an academic work, please cite the [original paper](https://doi.org/10.22331/q-2025-01-27-1609):
 
 ```
-@misc{lee2024color,
-      title={Color code decoder with improved scaling for correcting circuit-level noise}, 
-      author={Seok-Hyung Lee and Andrew Li and Stephen D. Bartlett},
-      year={2024},
-      eprint={2404.07482},
-      archivePrefix={arXiv},
-      primaryClass={quant-ph},
-      url={https://arxiv.org/abs/2404.07482}
+@article{lee2025color,
+  doi = {10.22331/q-2025-01-27-1609},
+  url = {https://doi.org/10.22331/q-2025-01-27-1609},
+  title = {Color code decoder with improved scaling for correcting circuit-level noise},
+  author = {Lee, Seok-Hyung and Li, Andrew and Bartlett, Stephen D.},
+  journal = {{Quantum}},
+  issn = {2521-327X},
+  publisher = {{Verein zur F{\"{o}}rderung des Open Access Publizierens in den Quantenwissenschaften}},
+  volume = {9},
+  pages = {1609},
+  month = jan,
+  year = {2025}
 }
 ```
 
