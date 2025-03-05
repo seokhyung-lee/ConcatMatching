@@ -354,7 +354,7 @@ class Decoder:
                  filtering_strategy: str = 'greedy_coloring',
                  filtering_options: Dict[str, Any] | None = None,
                  check_colors: np.ndarray | List[int] | None = None,
-                 comparison: bool = False,
+                 comparison: bool = True,
                  verbose: bool = False):
         """
         Class for constructing the concatenated matching decoder for a given
